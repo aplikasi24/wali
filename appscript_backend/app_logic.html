@@ -8,7 +8,7 @@
         }
 
         // --- 2. LocalStorage Database Management ---
-        const DB_KEY = 'manajemenWaliKelasDB';
+        let DB_KEY = 'manajemenWaliKelasDB';
         const defaultData = {
             students: [
                 { id: 1, nis: '2023001', nisn: '0011223344', name: 'Ahmad Budi Santoso', gender: 'L', kelas: '6A', ayah: 'Budi Santoso', ibu: 'Siti Kholijah', alamat: 'Jl. Merdeka No. 1', agama: 'Islam', hp: '081234567890' },
@@ -79,7 +79,7 @@
                 req.onsuccess = e => {
                     const idb = e.target.result;
                     const tx = idb.transaction('cache', 'readwrite');
-                    tx.objectStore('cache').put(jsonStr, 'db_json');
+                    tx.objectStore('cache').put(jsonStr, DB_KEY + '_json');
                     tx.oncomplete = () => idb.close();
                 };
             } catch(err) {}
@@ -7261,7 +7261,23 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
 
         // --- Boot App ---
         async function bootApp() {
+            if (window.currentUser && window.currentUser.email) {
+                DB_KEY = 'manajemenWaliKelasDB_' + window.currentUser.email.replace(/[^a-zA-Z0-9]/g, '_');
+            }
+
             let dbJson = localStorage.getItem(DB_KEY);
+            let isLegacyMigrated = false;
+            
+            // Migrasi untuk user lama yang sudah punya data di key default (hanya dilakukan sekali)
+            if (!dbJson && window.currentUser) {
+                const legacyDbJson = localStorage.getItem('manajemenWaliKelasDB');
+                if (legacyDbJson) {
+                    dbJson = legacyDbJson;
+                    isLegacyMigrated = true;
+                    // Hapus key lama agar user berikutnya tidak inherit data yang sama
+                    localStorage.removeItem('manajemenWaliKelasDB'); 
+                }
+            }
             
             // Jika localStorage kosong, coba pulihkan secara diam-diam dari IndexedDB Cache
             if (!dbJson) {
@@ -7276,8 +7292,16 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
                                 idb.close(); resolve(null); return;
                             }
                             const tx = idb.transaction('cache', 'readonly');
-                            const getReq = tx.objectStore('cache').get('db_json');
-                            getReq.onsuccess = () => { idb.close(); resolve(getReq.result); };
+                            const getReq = tx.objectStore('cache').get(DB_KEY + '_json');
+                            getReq.onsuccess = () => { 
+                                if (getReq.result) {
+                                    idb.close(); resolve(getReq.result);
+                                } else {
+                                    const getLegacy = tx.objectStore('cache').get('db_json');
+                                    getLegacy.onsuccess = () => { idb.close(); resolve(getLegacy.result); };
+                                    getLegacy.onerror = () => { idb.close(); resolve(null); };
+                                }
+                            };
                             getReq.onerror = () => { idb.close(); resolve(null); };
                         };
                         req.onerror = () => resolve(null);
