@@ -12,7 +12,7 @@
         const defaultData = {
             students: [
                 { id: 1, nis: '2023001', nisn: '0011223344', name: 'Ahmad Budi Santoso', gender: 'L', kelas: '6A', ayah: 'Budi Santoso', ibu: 'Siti Kholijah', alamat: 'Jl. Merdeka No. 1', agama: 'Islam', hp: '081234567890' },
-                { id: 2, nis: '2023002', nisn: '0011223355', name: 'Siti Aminah', gender: 'P', kelas: '6B', ayah: 'Abdullah', ibu: 'Fatimah', alamat: 'Jl. Pahlawan No. 2', agama: 'Islam', hp: '081298765432' },
+                { id: 2, nis: '2023002', nisn: '0011223355', name: 'Siti Aminah', gender: 'P', kelas: '6A', ayah: 'Abdullah', ibu: 'Fatimah', alamat: 'Jl. Pahlawan No. 2', agama: 'Islam', hp: '081298765432' },
                 { id: 3, nis: '2023003', nisn: '0011223366', name: 'Joko Wahyono', gender: 'L', kelas: '6A', ayah: 'Noto Mihardjo', ibu: 'Sudjiatmi', alamat: 'Jl. Ahmad Yani No. 3', agama: 'Islam', hp: '081312345678' }
             ],
             attendance_today: {},
@@ -7294,13 +7294,7 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
                             const tx = idb.transaction('cache', 'readonly');
                             const getReq = tx.objectStore('cache').get(DB_KEY + '_json');
                             getReq.onsuccess = () => { 
-                                if (getReq.result) {
-                                    idb.close(); resolve(getReq.result);
-                                } else {
-                                    const getLegacy = tx.objectStore('cache').get('db_json');
-                                    getLegacy.onsuccess = () => { idb.close(); resolve(getLegacy.result); };
-                                    getLegacy.onerror = () => { idb.close(); resolve(null); };
-                                }
+                                idb.close(); resolve(getReq.result || null);
                             };
                             getReq.onerror = () => { idb.close(); resolve(null); };
                         };
