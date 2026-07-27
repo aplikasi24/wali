@@ -522,7 +522,7 @@
                     if (data.message && data.message.includes('belum disetujui')) {
                         const emailInput = document.getElementById('login-email').value;
                         const pesanWA = encodeURIComponent(`Halo Admin, saya telah melakukan registrasi pada aplikasi Manajemen Wali Kelas.\n\nNama: [Tulis Nama Anda]\nEmail: ${emailInput}\n\nMohon untuk segera mengaktifkan akun saya. Terima kasih.`);
-                        errorDiv.innerHTML = `Akun belum diaktifkan silahkan tunggu / hubungi admin di <a href="https://wa.me/6285643263818?text=${pesanWA}" target="_blank" class="font-bold underline text-green-700 hover:text-green-900 inline-flex items-center gap-1 mx-1"><i class="fab fa-whatsapp"></i> 085643263818</a> atau kunjungi <a href="https://appzain.my.id" target="_blank" class="font-bold underline text-blue-700 hover:text-blue-900">https://appzain.my.id</a>`;
+                        errorDiv.innerHTML = `Akun belum diaktifkan silahkan hubungi admin di <a href="https://wa.me/6285643263818?text=${pesanWA}" target="_blank" class="font-bold underline text-green-700 hover:text-green-900 inline-flex items-center gap-1 mx-1"><i class="fab fa-whatsapp"></i> 085643263818</a> atau kunjungi <a href="https://appzain.my.id" target="_blank" class="font-bold underline text-blue-700 hover:text-blue-900">https://appzain.my.id</a>`;
                     } else {
                         errorDiv.innerText = data.message || 'Login gagal.';
                     }
