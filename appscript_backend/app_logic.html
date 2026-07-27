@@ -6808,6 +6808,7 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
 
         window.currentSemester = window.currentSemester || '1';
         window.changeSemester = (val) => { window.currentSemester = val; navigateTo('nilai'); };
+        window.changeKelasNilai = (val) => { window.currentKelasNilai = val; navigateTo('nilai'); };
 
         function renderNilai() {
             if(db.mapel.length === 0) return `<div class="bg-yellow-50 text-yellow-800 p-6 rounded-2xl shadow-sm text-center font-bold border border-yellow-200 mt-10"><i class="fas fa-exclamation-triangle text-3xl mb-3 block"></i>Silakan tambah Mata Pelajaran terlebih dahulu di menu Mata Pelajaran!</div>`;
@@ -6821,8 +6822,20 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
             let dataKey = window.currentSemester === '1' ? window.currentMapelNilai : window.currentMapelNilai + "_smt" + window.currentSemester;
             const p = db.pengaturan_nilai[window.currentMapelNilai] || { rumus: 'rata_rata', bobot_lm: 50, bobot_sts: 25, bobot_sas: 25, jumlah_tp: 5, jumlah_lm: 5 };
             
+            window.currentKelasNilai = window.currentKelasNilai || 'Semua Kelas';
+            let uniqueClasses = [...new Set(db.students.map(s => s.kelas || '-'))].sort();
+            let kelasOptions = `<option value="Semua Kelas" ${window.currentKelasNilai === 'Semua Kelas' ? 'selected' : ''}>Semua Kelas</option>`;
+            uniqueClasses.forEach(k => {
+                kelasOptions += `<option value="${k}" ${window.currentKelasNilai === k ? 'selected' : ''}>${k}</option>`;
+            });
+
+            let studentsToRender = db.students;
+            if (window.currentKelasNilai !== 'Semua Kelas') {
+                studentsToRender = db.students.filter(s => (s.kelas || '-') === window.currentKelasNilai);
+            }
+
             let scoreList = [];
-            db.students.forEach((s) => {
+            studentsToRender.forEach((s) => {
                 const n = (db.nilai[dataKey] && db.nilai[dataKey][s.id]) || {};
                 let sumLM = 0, countLM = 0;
                 for(let i=1; i<=p.jumlah_lm; i++) {
@@ -6849,7 +6862,7 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
                 rankMap[scoreList[i].id] = scoreList[i].score >= 0 ? currentRank : '-';
             }
             
-            const trs = db.students.map((s, index) => {
+            const trs = studentsToRender.map((s, index) => {
                 const n = (db.nilai[dataKey] && db.nilai[dataKey][s.id]) || {};
                 
                 let tpInputs = '';
@@ -6903,7 +6916,7 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
                     <div class="p-3 bg-gray-50 border-b border-gray-200 flex flex-col md:flex-row gap-3 items-stretch print-hide">
                         <div class="w-full md:w-1/2 bg-white p-2 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between gap-2">
-                            <div class="grid grid-cols-2 gap-2">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                 <div>
                                     <label class="block text-xs font-bold text-gray-700 mb-1"><i class="fas fa-calendar-alt mr-2 text-blue-500"></i>Semester</label>
                                     <select onchange="window.changeSemester(this.value)" class="w-full border ${window.currentSemester === '1' ? 'bg-green-100 border-green-300 text-green-900' : 'bg-blue-100 border-blue-300 text-blue-900'} rounded-lg p-1.5 focus:ring-2 focus:ring-blue-500 outline-none font-medium cursor-pointer text-sm">
@@ -6912,7 +6925,13 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-700 mb-1"><i class="fas fa-book mr-2 text-blue-500"></i>Pilih Mata Pelajaran</label>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1"><i class="fas fa-users mr-2 text-blue-500"></i>Pilih Kelas</label>
+                                    <select onchange="window.changeKelasNilai(this.value)" class="w-full border border-gray-300 rounded-lg p-1.5 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 font-medium text-gray-800 cursor-pointer text-sm">
+                                        ${kelasOptions}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1"><i class="fas fa-book mr-2 text-blue-500"></i>Mata Pelajaran</label>
                                     <select onchange="window.setMapelNilai(event)" class="w-full border border-gray-300 rounded-lg p-1.5 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 font-medium text-gray-800 cursor-pointer text-sm">
                                         ${mapelOptions}
                                     </select>
