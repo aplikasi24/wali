@@ -7225,15 +7225,15 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
                 const themeText = isDark ? 'Mode Terang' : 'Mode Gelap';
                 extraHeader = `
                     <div class="mt-4 md:mt-0 flex-1 flex flex-col sm:flex-row justify-end items-end sm:items-center gap-3">
-                        <div class="flex items-center justify-end gap-2 flex-wrap">
-                            <button id="install-app-btn" onclick="window.installPWA()" class="hidden bg-orange-500 text-white border border-orange-600 px-4 py-2.5 rounded-xl shadow-sm hover:bg-orange-600 transition flex items-center gap-2 print-hide" title="Instal Aplikasi">
-                                <i class="fas fa-download"></i> <span class="text-sm font-bold">Instal App</span>
+                        <div class="flex items-center justify-end gap-2 flex-nowrap w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                            <button id="install-app-btn" onclick="window.installPWA()" class="hidden bg-orange-500 text-white border border-orange-600 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl shadow-sm hover:bg-orange-600 transition flex items-center gap-1 sm:gap-2 print-hide whitespace-nowrap" title="Instal Aplikasi">
+                                <i class="fas fa-download"></i> <span class="text-xs sm:text-sm font-bold">Instal App</span>
                             </button>
-                            <button onclick="window.toggleFullScreen()" class="bg-white border border-gray-200 px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition flex items-center justify-center print-hide" title="Layar Penuh">
+                            <button onclick="window.toggleFullScreen()" class="bg-white border border-gray-200 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl shadow-sm hover:shadow transition flex items-center justify-center print-hide flex-shrink-0" title="Layar Penuh">
                                 <i class="fas fa-expand text-gray-600"></i>
                             </button>
-                            <button onclick="window.toggleTheme()" class="bg-white border border-gray-200 px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition flex items-center gap-2 print-hide">
-                                <i class="fas ${themeIcon}"></i> <span class="text-sm font-bold text-gray-700">${themeText}</span>
+                            <button onclick="window.toggleTheme()" class="bg-white border border-gray-200 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl shadow-sm hover:shadow transition flex items-center gap-1 sm:gap-2 print-hide whitespace-nowrap">
+                                <i class="fas ${themeIcon}"></i> <span class="text-xs sm:text-sm font-bold text-gray-700">${themeText}</span>
                             </button>
                         </div>
                         <div class="bg-indigo-50 border border-indigo-100 rounded-xl px-5 py-2.5 flex items-center gap-3 shadow-sm min-w-[200px] w-full sm:w-auto">
