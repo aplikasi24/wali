@@ -1941,9 +1941,10 @@
                             </div>
                         </form>
                     </div>
-                    <div class="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 rounded-b-2xl">
-                        <button onclick="document.getElementById('modal-cetak-absen').remove()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition font-medium">Batal</button>
-                        <button onclick="document.getElementById('form-cetak-absen').requestSubmit()" class="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition font-medium shadow-md flex items-center gap-2"><i class="fas fa-print"></i> Cetak PDF</button>
+                    <div class="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 rounded-b-2xl flex-wrap">
+                        <button type="button" onclick="document.getElementById('modal-cetak-absen').remove()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition font-medium">Batal</button>
+                        <button type="button" onclick="window.cetakRekapExcel(event)" class="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition font-medium shadow-md flex items-center gap-2"><i class="fas fa-file-excel"></i> Unduh Excel</button>
+                        <button type="button" onclick="document.getElementById('form-cetak-absen').requestSubmit()" class="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition font-medium shadow-md flex items-center gap-2"><i class="fas fa-print"></i> Cetak PDF</button>
                     </div>
                 </div>
             `;
@@ -2086,6 +2087,79 @@
             printWin.document.open();
             printWin.document.write(html);
             printWin.document.close();
+            
+            document.getElementById('modal-cetak-absen').remove();
+        };
+
+        window.cetakRekapExcel = (e) => {
+            e.preventDefault();
+            const form = document.getElementById('form-cetak-absen');
+            if(!form) return;
+            const bulan = form.bulan.value;
+            const tahun = form.tahun.value;
+            const yyyymm = `${tahun}-${bulan}`;
+            const namaBulan = form.bulan.options[form.bulan.selectedIndex].text;
+            
+            // Generate Data
+            let monthlyRecap = {};
+            db.students.forEach(s => monthlyRecap[s.id] = {Hadir:0, Sakit:0, Izin:0, Alpa:0});
+            Object.keys(db.attendance || {}).forEach(date => {
+                if(date.startsWith(yyyymm)) {
+                    Object.entries(db.attendance[date]).forEach(([sid, status]) => {
+                        if(monthlyRecap[sid] && monthlyRecap[sid][status] !== undefined) {
+                            monthlyRecap[sid][status]++;
+                        }
+                    });
+                }
+            });
+
+            const daysInMonth = new Date(tahun, parseInt(bulan), 0).getDate();
+            
+            let exportData = db.students.map((s, index) => {
+                const r = monthlyRecap[s.id];
+                let row = {
+                    "No": index + 1,
+                    "Nama Lengkap": s.name
+                };
+                
+                for(let i=1; i<=daysInMonth; i++) {
+                    const dateStr = `${tahun}-${bulan}-${String(i).padStart(2, '0')}`;
+                    const st = db.attendance[dateStr] ? db.attendance[dateStr][s.id] : '';
+                    let char = '-';
+                    
+                    const isLiburRecap = db.libur_dates && db.libur_dates[dateStr];
+                    if (isLiburRecap) {
+                        char = 'L';
+                    } else if(st==='Hadir') char = 'H';
+                    else if(st==='Sakit') char = 'S';
+                    else if(st==='Izin') char = 'I';
+                    else if(st==='Alpa') char = 'A';
+                    
+                    row[`Tgl ${i}`] = char;
+                }
+                
+                row["Total Hadir"] = r.Hadir;
+                row["Total Sakit"] = r.Sakit;
+                row["Total Izin"] = r.Izin;
+                row["Total Alpa"] = r.Alpa;
+                
+                return row;
+            });
+
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            
+            // Sesuaikan lebar kolom
+            const colWidths = [
+                { wch: 5 }, // No
+                { wch: 30 } // Nama
+            ];
+            for(let i=1; i<=daysInMonth; i++) colWidths.push({ wch: 6 }); // Tgl
+            colWidths.push({ wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }); // Total
+            ws['!cols'] = colWidths;
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Rekap Absensi");
+            XLSX.writeFile(wb, `Rekap_Absensi_${namaBulan}_${tahun}.xlsx`);
             
             document.getElementById('modal-cetak-absen').remove();
         };
