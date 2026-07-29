@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "id.my.appzain.walikelas.twa",
+        "sha256_cert_fingerprints": ["43:B0:83:E8:01:32:7E:10:E9:EF:8A:42:36:F1:24:71:38:6A:A7:99:15:1F:7D:82:5A:85:94:DA:41:89:59:07"]
+      }
+    }]
