@@ -57,7 +57,17 @@
                 { id: '3', name: 'Agus Pratama', title: 'Sekretaris', parentId: '1', photo: '' },
                 { id: '4', name: 'Rini Yulianti', title: 'Bendahara', parentId: '1', photo: '' },
                 { id: '5', name: 'Dedi Kusuma', title: 'Seksi Keamanan', parentId: '2', photo: '' }
-            ]
+            ],
+            kas_kelas: {
+                nominal: 1000,
+                tanggal_mulai: "2023-07-17", // Default contoh
+                hari_aktif: { Senin: true, Selasa: true, Rabu: true, Kamis: true, Jumat: true, Sabtu: false, Minggu: false },
+                pengeluaran: [], // { id, tgl, nominal, keterangan }
+                pembayaran: {} // { studentId: { 'YYYY-MM-DD': nominal } } ATAU { studentId: total_dibayar } untuk kesederhanaan.
+                // Wait, if it's based on date, maybe better to just use a simple total_dibayar if they can pay any amount at any time, 
+                // but the prompt says "daftar nama anak yang kurang di tanggal berapa". So let's store by date:
+                // pembayaran: { studentId: { '2023-10-12': 1000 } }
+            }
         };
 
         let db;
@@ -101,6 +111,7 @@
             { id: "piket", name: "Jadwal Piket", icon: "fa-broom", title: "Jadwal Piket", desc: "Jadwal regu kerja piket kebersihan kelas." },
             { id: "refleksi", name: "Refleksi Mingguan", icon: "fa-lightbulb", title: "Refleksi Mingguan", desc: "Catatan refleksi kinerja guru setiap akhir pekan." },
             { id: "inventaris", name: "Inventaris", icon: "fa-box-open", title: "Inventaris", desc: "Data sarana dan prasarana di dalam kelas." },
+            { id: "kas_kelas", name: "Kas Kelas", icon: "fa-money-bill-wave", title: "Kas Kelas", desc: "Manajemen keuangan dan kas kelas." },
             // Menu baru di atas pengaturan
             { id: "sync", name: "Kirim Data (Sync)", icon: "fa-cloud-upload-alt", title: "Sinkronisasi Server", desc: "Kirim data lokal aplikasi ini ke server sekolah." },
             { id: "pengaturan", name: "Pengaturan", icon: "fa-cog", title: "Pengaturan", desc: "Konfigurasi profil guru dan identitas kelas." }
@@ -120,11 +131,12 @@
                 if (!sidebarNav) return;
                 sidebarNav.innerHTML = '';
                 
+                if (!db.pengaturan) db.pengaturan = {};
                 // Hitung unread pesan
                 if (db.pengaturan.read_pesan_count === undefined) {
-                    db.pengaturan.read_pesan_count = db.pesan_info.length;
+                    db.pengaturan.read_pesan_count = db.pesan_info ? db.pesan_info.length : 0;
                 }
-                const unreadCount = Math.max(0, db.pesan_info.length - db.pengaturan.read_pesan_count);
+                const unreadCount = Math.max(0, (db.pesan_info ? db.pesan_info.length : 0) - db.pengaturan.read_pesan_count);
 
                 appMenus.forEach(menu => {
                     try {
@@ -6346,7 +6358,7 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
         };
 
         window.restoreFromCloud = async (fileId) => {
-            if (!await showConfirm("PERINGATAN: Semua data di HP Anda saat ini akan ditimpa dengan data dari file backup ini. Anda yakin?")) return;
+            if (!await showConfirm("PERINGATAN: Semua data di HP/PC Anda saat ini akan ditimpa dengan data dari file backup ini. Anda yakin?")) return;
             
             const loader = window.showLoading("Sedang mengunduh dan memulihkan data dari server...");
             try {
@@ -6434,7 +6446,7 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
                             </div>
                             <div class="bg-white p-5 rounded-xl shadow-sm border border-blue-100">
                                 <h4 class="font-bold text-gray-800 mb-2"><i class="fas fa-cloud-download-alt text-green-500 mr-2"></i>Pulihkan dari Server</h4>
-                                <p class="text-xs text-gray-500 mb-3">Tarik kembali data yang pernah Anda cadangkan dari server ke HP Anda.</p>
+                                <p class="text-xs text-gray-500 mb-3">Tarik kembali data yang pernah Anda cadangkan dari server ke HP/ PC Anda.</p>
                                 <button id="btn-load-cloud-backups" onclick="window.loadCloudBackups()" class="w-full bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200 transition border border-gray-300 shadow-sm text-sm">
                                     <i class="fas fa-sync-alt"></i> Muat Daftar Backup
                                 </button>
@@ -7207,9 +7219,666 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
             `;
         }
 
+        // --- Kas Kelas ---
+        function renderKasKelas() {
+            if (!db.kas_kelas) {
+                db.kas_kelas = {
+                    nominal: 10000,
+                    tanggal_mulai: '2026-07-13',
+                    hari_aktif: { 'Jumat': true },
+                    pembayaran: {},
+                    pengeluaran: []
+                };
+            }
+            let k = db.kas_kelas;
+            if(!k.pembayaran) k.pembayaran = {};
+            if(!k.pengeluaran) k.pengeluaran = [];
+
+            const tglMulai = new Date(k.tanggal_mulai);
+            const hariIni = new Date();
+            let hariBerlalu = 0;
+            
+            let datesToCheck = [];
+            if (!isNaN(tglMulai.getTime()) && tglMulai <= hariIni) {
+                let currentDate = new Date(tglMulai);
+                while (currentDate <= hariIni) {
+                    const hariNama = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][currentDate.getDay()];
+                    if (k.hari_aktif[hariNama]) {
+                        hariBerlalu++;
+                        datesToCheck.push(currentDate.toISOString().split('T')[0]);
+                    }
+                    currentDate.setDate(currentDate.getDate() + 1);
+                }
+            }
+
+            if (typeof window.kasCurrentDateIndex === 'undefined') {
+                window.kasCurrentDateIndex = datesToCheck.length > 0 ? datesToCheck.length - 1 : -1;
+            } else if (window.kasCurrentDateIndex >= datesToCheck.length) {
+                window.kasCurrentDateIndex = datesToCheck.length - 1;
+            }
+
+            let viewedDateStr = datesToCheck[window.kasCurrentDateIndex] || hariIni.toISOString().split('T')[0];
+            let viewedDateObj = new Date(viewedDateStr);
+            let viewedDateFormatted = viewedDateObj.toLocaleDateString('id-ID', {weekday: 'long', day: 'numeric', month: 'short', year: 'numeric'});
+
+            const hasPrev = window.kasCurrentDateIndex > 0;
+            const hasNext = window.kasCurrentDateIndex >= 0 && window.kasCurrentDateIndex < datesToCheck.length - 1;
+
+            const dayOfWeek = viewedDateObj.getDay(); 
+            const diffToMonday = viewedDateObj.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+            let weekStart = new Date(viewedDateObj);
+            weekStart.setDate(diffToMonday);
+            let weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 6);
+            
+            let datesInWeek = [];
+            for (let d = new Date(weekStart); d <= weekEnd; d.setDate(d.getDate() + 1)) {
+                datesInWeek.push(d.toISOString().split('T')[0]);
+            }
+
+            const totalHarusBayar = hariBerlalu * k.nominal;
+            let totalKeseluruhanBayar = 0;
+            let totalKeseluruhanKurang = 0;
+            let daftarTunggakanHtml = '';
+
+            let trs = db.students.map((s, index) => {
+                const bayarSiswa = k.pembayaran[s.id] || {};
+                let totalDibayarSiswa = 0;
+                let kasMingguIni = 0;
+                let tanggalTunggakan = [];
+                
+                datesToCheck.forEach(date => {
+                    const bayarHariIni = bayarSiswa[date] || 0;
+                    if(bayarHariIni < k.nominal) {
+                        const [y, m, d] = date.split('-');
+                        const dateFormatted = `${d}/${m}/${y}`;
+                        tanggalTunggakan.push(`${dateFormatted} (Kur. ${k.nominal - bayarHariIni})`);
+                    }
+                });
+                
+                datesInWeek.forEach(date => {
+                    kasMingguIni += (bayarSiswa[date] || 0);
+                });
+
+                const totalSemuaDibayar = Object.values(bayarSiswa).reduce((a,b)=>a+b, 0);
+                totalDibayarSiswa = totalSemuaDibayar; 
+                
+                let kurang = totalHarusBayar - totalDibayarSiswa;
+                if(kurang < 0) kurang = 0;
+                
+                if (kurang > 0 && tanggalTunggakan.length > 0) {
+                    daftarTunggakanHtml += `<li class="mb-2"><span class="font-bold text-red-600">${s.name}</span>: Kurang Rp ${kurang.toLocaleString('id-ID')} <br><span class="text-xs text-gray-500">Tunggakan di: ${tanggalTunggakan.join(', ')}</span></li>`;
+                } else if (kurang > 0) {
+                    daftarTunggakanHtml += `<li class="mb-2"><span class="font-bold text-red-600">${s.name}</span>: Kurang Rp ${kurang.toLocaleString('id-ID')}</li>`;
+                }
+
+                totalKeseluruhanBayar += totalDibayarSiswa;
+                totalKeseluruhanKurang += kurang;
+
+                const bayarViewed = bayarSiswa[viewedDateStr] || 0;
+                let inputBgColor = 'bg-white';
+                let inputTextColor = 'text-slate-900';
+                if (bayarViewed === 0) {
+                    inputBgColor = 'bg-red-50';
+                    inputTextColor = 'text-red-600';
+                } else if (bayarViewed < k.nominal) {
+                    inputBgColor = 'bg-yellow-50';
+                    inputTextColor = 'text-yellow-700';
+                } else {
+                    inputBgColor = 'bg-green-50';
+                    inputTextColor = 'text-green-700';
+                }
+
+                return `
+                <tr class="hover:bg-slate-50 transition-colors border-b border-slate-100">
+                    <td class="p-3 text-center text-sm">${index + 1}</td>
+                    <td class="p-3 text-sm font-medium">${s.name}</td>
+                    <td class="p-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-slate-400 font-bold text-xs">Rp</span>
+                            <input type="text" inputmode="numeric" id="input-bayar-${s.id}" class="w-24 border border-slate-300 rounded-lg p-1.5 text-sm outline-none focus:border-blue-500 font-bold ${inputBgColor} ${inputTextColor}" value="${bayarViewed === 0 ? '' : bayarViewed.toLocaleString('id-ID')}" oninput="window.formatInputRupiah(this)" onblur="window.updateBayarKas('${s.id}', '${viewedDateStr}', this.value)" placeholder="0">
+                            <button onclick="window.updateBayarKas('${s.id}', '${viewedDateStr}', 0)" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-[10px] px-2 py-1.5 rounded-lg font-bold shadow-sm transition whitespace-nowrap" title="Tandai Belum Bayar">
+                                <i class="fas fa-times mr-1"></i>Blm Byr
+                            </button>
+                        </div>
+                    </td>
+                    <td class="p-3 text-sm font-bold text-blue-600 text-right">Rp ${kasMingguIni.toLocaleString('id-ID')}</td>
+                    <td class="p-3 text-sm text-green-700 font-bold text-right border-l border-slate-100">Rp ${totalDibayarSiswa.toLocaleString('id-ID')}</td>
+                    <td class="p-3 text-sm text-red-600 font-bold text-right">Rp ${kurang.toLocaleString('id-ID')}</td>
+                </tr>
+                `;
+            }).join('');
+
+            if(db.students.length === 0) {
+                trs = '<tr><td colspan="6" class="text-center p-8 text-slate-500 italic">Belum ada data siswa.</td></tr>';
+            }
+
+            if (typeof window.pengeluaranPage === 'undefined') window.pengeluaranPage = 1;
+            if (typeof window.pengeluaranPerPage === 'undefined') window.pengeluaranPerPage = 10;
+            
+            let totalPengeluaran = 0;
+            k.pengeluaran.forEach(p => totalPengeluaran += p.nominal);
+
+            let dataPengeluaran = k.pengeluaran.map((p, index) => ({
+                ...p,
+                no: index + 1
+            })).reverse();
+            let totalPagesPengeluaran = 1;
+            
+            if (window.pengeluaranPerPage !== 'semua') {
+                let limit = parseInt(window.pengeluaranPerPage);
+                totalPagesPengeluaran = Math.ceil(dataPengeluaran.length / limit) || 1;
+                
+                if (window.pengeluaranPage > totalPagesPengeluaran) window.pengeluaranPage = totalPagesPengeluaran;
+                if (window.pengeluaranPage < 1) window.pengeluaranPage = 1;
+                
+                const startIndex = (window.pengeluaranPage - 1) * limit;
+                dataPengeluaran = dataPengeluaran.slice(startIndex, startIndex + limit);
+            }
+
+            let trsPengeluaran = dataPengeluaran.map(p => {
+                return `
+                <tr class="border-b border-slate-100">
+                    <td class="p-2 text-sm text-center text-slate-500 font-bold">${p.no}</td>
+                    <td class="p-2 text-sm">${p.tgl}</td>
+                    <td class="p-2 text-sm">${p.keterangan}</td>
+                    <td class="p-2 text-sm text-right font-bold text-red-600">Rp ${p.nominal.toLocaleString('id-ID')}</td>
+                    <td class="p-2 text-center"><button onclick="window.hapusPengeluaranKas('${p.id}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button></td>
+                </tr>
+                `;
+            }).join('');
+            
+            if(k.pengeluaran.length === 0) {
+                trsPengeluaran = '<tr><td colspan="5" class="text-center p-4 text-slate-500 italic">Belum ada pengeluaran.</td></tr>';
+            }
+            
+            let paginationHtml = '';
+            if (k.pengeluaran.length > 10 || window.pengeluaranPerPage !== 10) {
+                paginationHtml = `
+                <div class="flex flex-col sm:flex-row justify-between items-center bg-slate-50 border-t border-slate-200 p-3 gap-3">
+                    <div class="flex items-center gap-2 text-sm text-slate-600 font-medium">
+                        Tampilkan:
+                        <select onchange="window.setPengeluaranPerPage(this.value)" class="border border-slate-300 rounded-lg px-2 py-1 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white">
+                            <option value="10" ${window.pengeluaranPerPage == 10 ? 'selected' : ''}>10</option>
+                            <option value="20" ${window.pengeluaranPerPage == 20 ? 'selected' : ''}>20</option>
+                            <option value="semua" ${window.pengeluaranPerPage === 'semua' ? 'selected' : ''}>Semua</option>
+                        </select>
+                    </div>
+                    ${window.pengeluaranPerPage !== 'semua' ? `
+                    <div class="flex items-center gap-2">
+                        <button onclick="window.navigasiPengeluaranPage(-1)" ${window.pengeluaranPage <= 1 ? 'disabled' : ''} class="px-2 py-1 bg-white border border-slate-300 text-slate-600 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition shadow-sm"><i class="fas fa-chevron-left"></i></button>
+                        <span class="text-sm font-bold text-slate-700 mx-1">Hal ${window.pengeluaranPage} dari ${totalPagesPengeluaran}</span>
+                        <button onclick="window.navigasiPengeluaranPage(1)" ${window.pengeluaranPage >= totalPagesPengeluaran ? 'disabled' : ''} class="px-2 py-1 bg-white border border-slate-300 text-slate-600 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition shadow-sm"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                    ` : ''}
+                </div>
+                `;
+            }
+
+            const saldoAkhir = totalKeseluruhanBayar - totalPengeluaran;
+
+            const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+            const cbHari = days.map(d => `
+                <label class="flex items-center gap-1.5 text-sm cursor-pointer bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+                    <input type="checkbox" id="chk-hari-${d}" onchange="window.simpanPengaturanKas()" ${k.hari_aktif[d] ? 'checked' : ''} class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"> <span>${d}</span>
+                </label>
+            `).join('');
+
+            return `
+            <div class="space-y-6">
+                <!-- Pengaturan Kas -->
+                <div class="bg-white p-6 rounded-2xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-100">
+                    <h2 class="text-lg font-bold text-slate-800 mb-5"><i class="fas fa-cogs mr-2 text-slate-400"></i>Pengaturan Kas Kelas</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-2">
+                        <div class="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                            <label class="block text-sm font-bold text-slate-700 mb-2">Nominal Uang Kas (Rp)</label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold">Rp</span>
+                                <input type="text" inputmode="numeric" id="kas-nominal" value="${k.nominal ? k.nominal.toLocaleString('id-ID') : ''}" oninput="window.formatInputRupiah(this)" onchange="window.simpanPengaturanKas()" class="pl-10 w-full border border-slate-300 rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition font-medium">
+                            </div>
+                        </div>
+                        <div class="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                            <label class="block text-sm font-bold text-slate-700 mb-2">Tanggal Mulai Berlaku</label>
+                            <input type="date" id="kas-tgl-mulai" value="${k.tanggal_mulai}" onchange="window.simpanPengaturanKas()" class="w-full border border-slate-300 rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition font-medium">
+                        </div>
+                        <div class="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                            <label class="block text-sm font-bold text-slate-700 mb-2">Hari Aktif Kas</label>
+                            <div class="flex flex-wrap gap-2">
+                                ${cbHari}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabel Pembayaran -->
+                <div class="bg-white p-6 rounded-2xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-100 overflow-hidden">
+                    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-5 gap-3">
+                        <h2 class="text-lg font-bold text-slate-800"><i class="fas fa-users mr-2 text-blue-500"></i>Daftar Siswa & Pembayaran</h2>
+                        <div class="flex flex-col sm:flex-row items-center gap-3">
+                            <div class="flex bg-slate-100 rounded-xl p-1 shadow-inner items-center">
+                                <button onclick="window.navigasiHariKas(-1)" ${!hasPrev ? 'disabled' : ''} class="px-3 py-1.5 rounded-lg text-slate-600 font-bold hover:bg-white hover:shadow-sm disabled:opacity-30 transition"><i class="fas fa-chevron-left mr-1"></i> Prev</button>
+                                <span class="px-4 font-bold text-slate-800 text-sm whitespace-nowrap">${datesToCheck.length > 0 ? viewedDateFormatted : 'Tidak ada hari aktif'}</span>
+                                <button onclick="window.navigasiHariKas(1)" ${!hasNext ? 'disabled' : ''} class="px-3 py-1.5 rounded-lg text-slate-600 font-bold hover:bg-white hover:shadow-sm disabled:opacity-30 transition">Next <i class="fas fa-chevron-right ml-1"></i></button>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="window.bukaFilterTunggakan()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-sm transition shadow-sm whitespace-nowrap"><i class="fas fa-search-dollar mr-1.5"></i>Filter Pintar</button>
+                                <button onclick="window.bayarSemuaKas('${viewedDateStr}')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-sm transition shadow-sm whitespace-nowrap"><i class="fas fa-check-double mr-1.5"></i>Lunas Semua</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto rounded-xl border border-slate-200" style="-webkit-overflow-scrolling: touch;">
+                        <table class="w-full text-left border-collapse whitespace-nowrap min-w-max" style="touch-action: pan-x pan-y;">
+                            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 text-sm">
+                                <tr>
+                                    <th class="p-3 text-center w-12 font-bold">No</th>
+                                    <th class="p-3 font-bold">Nama Siswa</th>
+                                    <th class="p-3 font-bold w-48">Bayar (Rp)</th>
+                                    <th class="p-3 font-bold text-right text-blue-700">Kas Mgg Ini</th>
+                                    <th class="p-3 font-bold text-right border-l border-slate-200">Total Dibayar</th>
+                                    <th class="p-3 font-bold text-right">Jumlah Kurang</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${trs}
+                            </tbody>
+                            <tfoot class="bg-slate-100 border-t border-slate-300">
+                                <tr>
+                                    <td colspan="4" class="p-4 text-right font-bold text-slate-700">TOTAL KESELURUHAN</td>
+                                    <td class="p-4 text-right font-black text-green-700 text-base border-l border-slate-200">Rp ${totalKeseluruhanBayar.toLocaleString('id-ID')}</td>
+                                    <td class="p-4 text-right font-black text-red-600 text-base">Rp ${totalKeseluruhanKurang.toLocaleString('id-ID')}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Saldo & Pengeluaran -->
+                    <div class="bg-white p-6 rounded-2xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-100 flex flex-col">
+                        <h2 class="text-lg font-bold text-slate-800 mb-5"><i class="fas fa-wallet mr-2 text-emerald-500"></i>Saldo Digunakan (Pengeluaran)</h2>
+                        
+                        <div class="bg-gradient-to-r from-emerald-500 to-green-600 p-5 rounded-xl shadow-md text-white mb-6 flex justify-between items-center transform transition-transform hover:scale-[1.01]">
+                            <div>
+                                <div class="text-emerald-100 text-sm font-bold tracking-wider uppercase mb-1">Saldo Kas Saat Ini</div>
+                                <div class="text-3xl font-black">Rp ${saldoAkhir.toLocaleString('id-ID')}</div>
+                            </div>
+                            <div class="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                                <i class="fas fa-coins text-2xl text-white"></i>
+                            </div>
+                        </div>
+
+                        <div class="border border-slate-200 rounded-xl overflow-x-auto mb-5" style="-webkit-overflow-scrolling: touch;">
+                            <table class="w-full text-left whitespace-nowrap min-w-max" style="touch-action: pan-x pan-y;">
+                                <thead class="bg-slate-50 border-b border-slate-200">
+                                    <tr>
+                                        <th class="p-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-center w-10">No</th>
+                                        <th class="p-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Tgl</th>
+                                        <th class="p-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Keterangan</th>
+                                        <th class="p-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Nominal</th>
+                                        <th class="p-3"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>${trsPengeluaran}</tbody>
+                                <tfoot class="bg-red-50 border-t border-red-100">
+                                    <tr>
+                                        <td colspan="3" class="p-3 text-right font-bold text-red-800 text-sm">Total Digunakan</td>
+                                        <td colspan="2" class="p-3 font-bold text-red-700 text-right text-base">Rp ${totalPengeluaran.toLocaleString('id-ID')}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                            ${paginationHtml}
+                        </div>
+
+                        <div class="mt-auto pt-5 border-t border-slate-100">
+                            <h4 class="text-sm font-bold text-slate-700 mb-3"><i class="fas fa-plus-circle mr-1.5 text-blue-500"></i>Catat Pengeluaran Baru</h4>
+                            <div class="flex flex-col sm:flex-row gap-2">
+                                <input type="text" id="pengeluaran-ket" placeholder="Keterangan..." class="flex-1 border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 font-medium">
+                                <input type="text" inputmode="numeric" id="pengeluaran-nom" placeholder="Nominal (Rp)" class="w-full sm:w-32 border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 font-medium" oninput="window.formatInputRupiah(this)">
+                                <button onclick="window.tambahPengeluaranKas()" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-5 py-2.5 text-sm font-bold shadow-sm transition"><i class="fas fa-plus"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Daftar Tunggakan -->
+                    <div class="bg-white p-6 rounded-2xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-100 flex flex-col">
+                        <h2 class="text-lg font-bold text-slate-800 mb-5"><i class="fas fa-exclamation-triangle mr-2 text-red-500"></i>Daftar Tunggakan Siswa</h2>
+                        <div class="bg-slate-50 flex-1 p-5 rounded-xl border border-slate-200 max-h-[420px] overflow-y-auto custom-scrollbar shadow-inner">
+                            ${daftarTunggakanHtml ? `<ul class="list-disc pl-5 text-sm space-y-3">${daftarTunggakanHtml}</ul>` : `<div class="h-full flex flex-col items-center justify-center text-emerald-600 py-10 font-bold"><div class="w-16 h-16 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center mb-3"><i class="fas fa-check text-3xl"></i></div><p class="text-lg">Luar Biasa!</p><p class="text-emerald-500 font-medium text-sm">Tidak ada siswa yang menunggak kas.</p></div>`}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            `;
+        }
+
+        window.showModernConfirm = (message, iconHtml, onConfirm) => {
+            const existing = document.getElementById('modern-confirm-modal');
+            if (existing) existing.remove();
+            
+            const modal = document.createElement('div');
+            modal.id = 'modern-confirm-modal';
+            modal.className = 'fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4';
+            
+            modal.innerHTML = `
+                <div class="bg-white rounded-3xl shadow-2xl w-full max-w-xs overflow-hidden transform scale-100 transition-all border border-slate-100">
+                    <div class="p-6 text-center">
+                        <div class="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
+                            ${iconHtml || '<span class="text-4xl">💸</span>'}
+                        </div>
+                        <h3 class="text-xl font-black text-slate-800 mb-2">Konfirmasi</h3>
+                        <p class="text-slate-600 text-sm mb-6 leading-relaxed">${message}</p>
+                        <div class="flex gap-3">
+                            <button id="mc-btn-cancel" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition text-sm">Batal</button>
+                            <button id="mc-btn-confirm" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-[0_4px_12px_rgba(16,185,129,0.3)] hover:shadow-[0_6px_16px_rgba(16,185,129,0.4)] transition text-sm transform hover:-translate-y-0.5">Ya, Gas!</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            document.getElementById('mc-btn-cancel').onclick = () => {
+                modal.classList.add('opacity-0');
+                setTimeout(() => modal.remove(), 200);
+            };
+            document.getElementById('mc-btn-confirm').onclick = () => {
+                modal.classList.add('opacity-0');
+                setTimeout(() => {
+                    modal.remove();
+                    if (onConfirm) onConfirm();
+                }, 200);
+            };
+        };
+
+        window.formatInputRupiah = (el) => {
+            const originalValue = el.value;
+            let val = originalValue.replace(/[^0-9]/g, '');
+            let formatted = '';
+            
+            if (val !== '') {
+                formatted = parseInt(val, 10).toLocaleString('id-ID');
+            }
+            
+            if (originalValue !== formatted) {
+                let cursorPosition = el.selectionStart || 0;
+                let originalLen = originalValue.length;
+                
+                el.value = formatted;
+                
+                let newLen = formatted.length;
+                cursorPosition += (newLen - originalLen);
+                
+                if (el.setSelectionRange) {
+                    try {
+                        el.setSelectionRange(cursorPosition, cursorPosition);
+                    } catch(e) {}
+                }
+            }
+        };
+
+        window.simpanPengaturanKas = () => {
+            const nominalStr = document.getElementById('kas-nominal').value || '0';
+            const nominal = parseInt(nominalStr.replace(/\./g, '')) || 0;
+            const tglMulai = document.getElementById('kas-tgl-mulai').value;
+            const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+            
+            if(!db.kas_kelas) db.kas_kelas = {};
+            if(!db.kas_kelas.hari_aktif) db.kas_kelas.hari_aktif = {};
+
+            db.kas_kelas.nominal = nominal;
+            db.kas_kelas.tanggal_mulai = tglMulai;
+            days.forEach(d => {
+                db.kas_kelas.hari_aktif[d] = document.getElementById('chk-hari-' + d).checked;
+            });
+            
+            saveDB();
+            // Retain the current date index across re-renders
+            navigateTo('kas_kelas');
+        };
+
+        window.navigasiHariKas = (dir) => {
+            window.kasCurrentDateIndex += dir;
+            navigateTo('kas_kelas');
+        };
+
+        window.bukaFilterTunggakan = () => {
+            const k = db.kas_kelas;
+            const nom = k.nominal;
+            const tglMulai = new Date(k.tanggal_mulai);
+            const hariIni = new Date();
+            let datesToCheck = [];
+            
+            if (!isNaN(tglMulai.getTime()) && tglMulai <= hariIni) {
+                let currentDate = new Date(tglMulai);
+                while (currentDate <= hariIni) {
+                    const hariNama = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][currentDate.getDay()];
+                    if (k.hari_aktif[hariNama]) {
+                        datesToCheck.push(currentDate.toISOString().split('T')[0]);
+                    }
+                    currentDate.setDate(currentDate.getDate() + 1);
+                }
+            }
+
+            let tunggakanHtml = '';
+            let countTunggakan = 0;
+
+            db.students.forEach(s => {
+                let totalKurangSiswa = 0;
+                let arrTunggakan = [];
+                
+                datesToCheck.forEach(d => {
+                    let byr = (k.pembayaran[s.id] && k.pembayaran[s.id][d]) !== undefined ? k.pembayaran[s.id][d] : 0;
+                    if(byr < nom) {
+                        let kurang = nom - byr;
+                        totalKurangSiswa += kurang;
+                        let [yyyy, mm, dd] = d.split('-');
+                        arrTunggakan.push({ dateStr: d, formatTgl: `${dd}/${mm}/${yyyy}`, kurang, byr });
+                    }
+                });
+
+                if (totalKurangSiswa > 0) {
+                    countTunggakan++;
+                    let rincianHtml = arrTunggakan.map(t => `
+                        <div class="flex justify-between items-center bg-white p-2 rounded border border-slate-100 mb-1">
+                            <span class="text-xs font-medium text-slate-600"><i class="fas fa-calendar-alt text-slate-400 mr-1"></i>${t.formatTgl}</span>
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-xs font-bold text-slate-400">Rp</span>
+                                <input type="text" inputmode="numeric" value="${t.byr > 0 ? t.byr.toLocaleString('id-ID') : ''}" oninput="window.formatInputRupiah(this)" onchange="window.updateBayarKasModal('${s.id}', '${t.dateStr}', this.value)" class="w-16 text-xs font-bold text-red-600 border border-slate-300 rounded px-1.5 py-1 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-right bg-red-50/30" placeholder="0">
+                                <button onclick="window.lunasiSatuTunggakan('${s.id}', '${t.dateStr}', ${nom})" class="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded text-[10px] font-bold transition shadow-sm ml-1 whitespace-nowrap"><i class="fas fa-check mr-1"></i>sdh kas</button>
+                            </div>
+                        </div>
+                    `).join('');
+
+                    let sHtml = `
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-3 hover:shadow-md transition">
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <h4 class="font-bold text-slate-800">${s.name}</h4>
+                                <span class="text-[10px] font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded-full inline-block mt-1 border border-red-200">Total: Rp -${totalKurangSiswa.toLocaleString('id-ID')}</span>
+                            </div>
+                            <button onclick="window.lunasiSemuaTunggakanSiswa('${s.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition"><i class="fas fa-check-circle mr-1"></i>Lunas Semua</button>
+                        </div>
+                        <div class="space-y-1">
+                            ${rincianHtml}
+                        </div>
+                    </div>
+                    `;
+                    tunggakanHtml += sHtml;
+                }
+            });
+
+            if (countTunggakan === 0) {
+                tunggakanHtml = '<div class="text-center py-10"><i class="fas fa-check-circle text-5xl text-emerald-400 mb-4"></i><h3 class="text-lg font-bold text-slate-700">Hebat!</h3><p class="text-slate-500">Tidak ada siswa yang menunggak kas.</p></div>';
+            }
+
+            const modalHtml = `
+            <div id="filter-tunggakan-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm opacity-0 transition-opacity duration-300">
+                <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]">
+                    <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 relative">
+                        <h3 class="font-bold text-lg text-slate-800"><i class="fas fa-search-dollar text-indigo-500 mr-2"></i>Filter Pintar</h3>
+                        <button onclick="window.tutupFilterTunggakan()" class="text-slate-400 hover:text-red-500 transition text-2xl w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 absolute right-4 top-4">&times;</button>
+                    </div>
+                    <div class="p-5 overflow-y-auto flex-1 bg-slate-100/50">
+                        ${tunggakanHtml}
+                    </div>
+                </div>
+            </div>
+            `;
+            
+            let existing = document.getElementById('filter-tunggakan-modal');
+            if (existing) existing.remove();
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            setTimeout(() => {
+                const modal = document.getElementById('filter-tunggakan-modal');
+                if(modal) {
+                    modal.classList.remove('opacity-0');
+                    modal.children[0].classList.remove('scale-95');
+                }
+            }, 10);
+        };
+
+        window.tutupFilterTunggakan = () => {
+            const modal = document.getElementById('filter-tunggakan-modal');
+            if(modal) {
+                modal.classList.add('opacity-0');
+                modal.children[0].classList.add('scale-95');
+                setTimeout(() => modal.remove(), 300);
+            }
+        };
+
+        window.updateBayarKasModal = (studentId, dateStr, valueStr) => {
+            const valueClean = String(valueStr).replace(/\./g, '');
+            let nominal = parseInt(valueClean) || 0;
+            if(!db.kas_kelas.pembayaran[studentId]) db.kas_kelas.pembayaran[studentId] = {};
+            if (nominal === 0) {
+                delete db.kas_kelas.pembayaran[studentId][dateStr];
+            } else {
+                db.kas_kelas.pembayaran[studentId][dateStr] = nominal;
+            }
+            saveDB();
+            window.bukaFilterTunggakan(); 
+            navigateTo('kas_kelas'); 
+        };
+
+        window.lunasiSatuTunggakan = (studentId, dateStr, nominal) => {
+            if(!db.kas_kelas.pembayaran[studentId]) db.kas_kelas.pembayaran[studentId] = {};
+            db.kas_kelas.pembayaran[studentId][dateStr] = nominal;
+            saveDB();
+            window.bukaFilterTunggakan(); 
+            navigateTo('kas_kelas'); 
+        };
+
+        window.lunasiSemuaTunggakanSiswa = (studentId) => {
+            const k = db.kas_kelas;
+            const nom = k.nominal;
+            const tglMulai = new Date(k.tanggal_mulai);
+            const hariIni = new Date();
+            
+            if(!k.pembayaran[studentId]) k.pembayaran[studentId] = {};
+
+            if (!isNaN(tglMulai.getTime()) && tglMulai <= hariIni) {
+                let currentDate = new Date(tglMulai);
+                while (currentDate <= hariIni) {
+                    const hariNama = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][currentDate.getDay()];
+                    if (k.hari_aktif[hariNama]) {
+                        let d = currentDate.toISOString().split('T')[0];
+                        let byr = k.pembayaran[studentId][d] || 0;
+                        if(byr < nom) {
+                            k.pembayaran[studentId][d] = nom;
+                        }
+                    }
+                    currentDate.setDate(currentDate.getDate() + 1);
+                }
+            }
+            saveDB();
+            window.bukaFilterTunggakan(); 
+            navigateTo('kas_kelas'); 
+        };
+
+        window.bayarSemuaKas = (dateStr) => {
+            window.showModernConfirm(
+                "Gas auto-lunasin uang kas sekelas buat tanggal ini?",
+                '<span class="text-5xl">💸</span>',
+                () => {
+                    const nom = db.kas_kelas.nominal;
+                    db.students.forEach(s => {
+                        if(!db.kas_kelas.pembayaran[s.id]) db.kas_kelas.pembayaran[s.id] = {};
+                        db.kas_kelas.pembayaran[s.id][dateStr] = nom;
+                    });
+                    saveDB();
+                    navigateTo('kas_kelas');
+                }
+            );
+        };
+
+        window.updateBayarKas = (studentId, dateStr, valueStr) => {
+            const valueClean = String(valueStr).replace(/\./g, '');
+            let nominal = parseInt(valueClean) || 0;
+            
+            if(!db.kas_kelas.pembayaran[studentId]) db.kas_kelas.pembayaran[studentId] = {};
+            
+            if (nominal === 0) {
+                delete db.kas_kelas.pembayaran[studentId][dateStr];
+            } else {
+                db.kas_kelas.pembayaran[studentId][dateStr] = nominal;
+            }
+            
+            saveDB();
+            navigateTo('kas_kelas'); 
+        };
+
+        window.tambahPengeluaranKas = () => {
+            const ket = document.getElementById('pengeluaran-ket').value.trim();
+            const nomStr = document.getElementById('pengeluaran-nom').value || '0';
+            const nom = parseInt(nomStr.replace(/\./g, ''));
+            
+            if(!ket || isNaN(nom) || nom <= 0) {
+                alert("Lengkapi keterangan dan nominal pengeluaran yang valid!");
+                return;
+            }
+            
+            db.kas_kelas.pengeluaran.push({
+                id: Date.now().toString(),
+                tgl: new Date().toLocaleDateString('id-ID'),
+                keterangan: ket,
+                nominal: nom
+            });
+            
+            saveDB();
+            navigateTo('kas_kelas');
+        };
+
+        window.hapusPengeluaranKas = (id) => {
+            window.showModernConfirm(
+                "Yakin mau menghapus riwayat pengeluaran kas ini?",
+                '<span class="text-5xl">💸</span>',
+                () => {
+                    db.kas_kelas.pengeluaran = db.kas_kelas.pengeluaran.filter(p => p.id !== id);
+                    saveDB();
+                    navigateTo('kas_kelas');
+                }
+            );
+        };
+
+        window.setPengeluaranPerPage = (val) => {
+            window.pengeluaranPerPage = val;
+            window.pengeluaranPage = 1;
+            navigateTo('kas_kelas');
+        };
+
+        window.navigasiPengeluaranPage = (dir) => {
+            window.pengeluaranPage += dir;
+            navigateTo('kas_kelas');
+        };
+
         // --- 7. Navigation Router ---
         window.navigateTo = function(menuId, preventLoadMessages = false) {
-            currentPage = menuId;
+            const isSamePage = (window.currentPage === menuId);
+            const currentScrollPos = typeof mainScrollArea !== 'undefined' ? mainScrollArea.scrollTop : 0;
+            
+            window.currentPage = menuId;
             try {
                 localStorage.setItem('mwk_lastMenu', menuId);
             } catch(e) {}
@@ -7301,6 +7970,7 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
                     case 'piket': contentHtml += renderPiket(); break;
                     case 'refleksi': contentHtml += renderRefleksi(); break;
                     case 'inventaris': contentHtml += renderInventaris(); break;
+                    case 'kas_kelas': contentHtml += renderKasKelas(); break;
                     case 'sync': contentHtml += renderSync(); break;
                     case 'pengaturan': contentHtml += renderPengaturan(); break;
                     default: contentHtml += `<div class="text-center p-10 text-gray-500">Modul belum tersedia.</div>`;
@@ -7321,7 +7991,12 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
                 alert("Kesalahan Sistem: Elemen #app-content tidak ditemukan!");
             }
             
-            mainScrollArea.scrollTop = 0;
+            if (isSamePage && typeof mainScrollArea !== 'undefined') {
+                mainScrollArea.scrollTop = currentScrollPos;
+                requestAnimationFrame(() => mainScrollArea.scrollTop = currentScrollPos);
+            } else if (typeof mainScrollArea !== 'undefined') {
+                mainScrollArea.scrollTop = 0;
+            }
             
             if (menuId === 'dashboard') {
                 setTimeout(() => {
@@ -7466,9 +8141,12 @@ Pastikan tulisan nama hari beserta daftar nama siswanya sesuai data di atas dima
             }
             
             // Proses Migrasi Kunci Baru & Validasi Struktur (Selalu dijalankan)
-            ['mapel', 'jurnal', 'tugas', 'catatan', 'inventaris', 'jadwal', 'piket', 'nilai', 'pengaturan_nilai', 'libur_dates', 'pengaturan', 'refleksi_mingguan', 'pesan_info', 'struktur_organisasi'].forEach(k => {
-                if(!db[k]) db[k] = defaultData[k] || (k === 'nilai' || k === 'pengaturan_nilai' || k === 'libur_dates' ? {} : (k === 'pengaturan' ? {nama: window.currentUser ? window.currentUser.nama : '', nip: '-', sekolah: window.currentUser ? window.currentUser.sekolah : '', npsn: window.currentUser ? window.currentUser.npsn : ''} : (k === 'refleksi_mingguan' ? {emoji: '', teks: ''} : [])));
+            ['mapel', 'jurnal', 'tugas', 'catatan', 'inventaris', 'jadwal', 'piket', 'nilai', 'pengaturan_nilai', 'libur_dates', 'pengaturan', 'refleksi_mingguan', 'pesan_info', 'struktur_organisasi', 'kas_kelas'].forEach(k => {
+                if(!db[k]) db[k] = defaultData[k] || (k === 'nilai' || k === 'pengaturan_nilai' || k === 'libur_dates' ? {} : (k === 'pengaturan' ? {nama: window.currentUser ? window.currentUser.nama : '', nip: '-', sekolah: window.currentUser ? window.currentUser.sekolah : '', npsn: window.currentUser ? window.currentUser.npsn : ''} : (k === 'refleksi_mingguan' ? {emoji: '', teks: ''} : (k === 'kas_kelas' ? {nominal: 1000, tanggal_mulai: "2026-07-13", hari_aktif: {Senin: true, Selasa: true, Rabu: true, Kamis: true, Jumat: true, Sabtu: false, Minggu: false}, pengeluaran: [], pembayaran: {}} : []))));
             });
+            if (db.kas_kelas && db.kas_kelas.tanggal_mulai === '2023-07-17') {
+                db.kas_kelas.tanggal_mulai = '2026-07-13';
+            }
             if (Array.isArray(db.libur_dates)) {
                 let obj = {};
                 db.libur_dates.forEach(d => obj[d] = 'Libur');
