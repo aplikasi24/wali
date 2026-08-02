@@ -1,10 +1,8 @@
 [{
-  "relation": ["delegate_permission/common.handle_all_urls"],
-  "target": {
-    "namespace": "android_app",
-    "package_name": "id.my.appzain.walikelas.twa",
-    "sha256_cert_fingerprints": [
-      "E1:33:16:AA:65:0B:CF:56:A8:86:08:17:CF:4A:BD:D2:2D:89:45:42:A0:AA:08:E1:C8:10:5A:54:B4:D1:94:01"
-    ]
-  }
-}]
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "id.my.appzain.walikelas.twa",
+        "sha256_cert_fingerprints": ["25:A0:67:A6:0D:1A:58:F3:4A:02:46:D1:FF:D4:BE:A1:86:1A:8E:27:49:A4:2A:0F:63:05:AE:96:44:C8:99:66"]
+      }
+    }]
